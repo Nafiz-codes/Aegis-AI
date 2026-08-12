@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.local
+data/aegis.db
+data/aegis.db-*
+*.log
+.DS_Store

@@ -1,0 +1,33 @@
+{
+  "name": "aegis-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered emergency/disaster communication agent for the Caspian Buildathon.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "caspian-sdk": "^0.6.4",
+    "dotenv": "^16.4.5",
+    "pino": "^9.5.0",
+    "sql.js": "^1.11.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/sql.js": "^1.4.9",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.1"
+  }
+}
