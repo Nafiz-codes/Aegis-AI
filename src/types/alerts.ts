@@ -1,10 +1,25 @@
 import { z } from "zod";
 import { Channel } from "./user.js";
-import { DisasterType, GeoPoint, Severity } from "./events.js";
+import { DisasterType, GeoPoint, SEVERITY_TIERS, type SeverityLevel } from "./events.js";
 
-/** Status of a dispatched alert. */
+/**
+ * Status of a dispatched alert.
+ *
+ * The lifecycle is:
+ *   queued   — alert row created in the store, not yet handed to a channel.
+ *   sending  — handed to the comm router and currently in flight.
+ *   retrying — first send failed; the router is waiting before trying again.
+ *   sent     — the channel accepted the message (Caspian returned an id).
+ *   delivered — the channel confirmed delivery to the recipient (where the
+ *                channel reports it; otherwise it stays at `sent`).
+ *   failed   — all retries exhausted; the alert is permanently stuck.
+ *   skipped  — never tried (e.g. no contact for the chosen channel, or the
+ *                chosen capability isn't granted on this API key).
+ */
 export const AlertStatus = z.enum([
   "queued",
+  "sending",
+  "retrying",
   "sent",
   "delivered",
   "failed",
@@ -27,7 +42,7 @@ export const Alert = z.object({
   eventId: z.string().min(1),
   userId: z.string().min(1),
   channel: Channel,
-  severity: Severity,
+  severity: z.enum(SEVERITY_TIERS),
   composed: ComposedAlert,
   status: AlertStatus,
   /** Caspian conversation id (once known) so we can send follow-ups. */
@@ -56,7 +71,7 @@ export const DecisionContext = z.object({
   event: z.object({
     id: z.string(),
     type: DisasterType,
-    severity: Severity,
+    severity: z.enum(SEVERITY_TIERS),
     location: GeoPoint,
     locationName: z.string().optional(),
     radiusKm: z.number().optional(),

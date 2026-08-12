@@ -17,6 +17,11 @@ const RawEnv = z.object({
 
   OPENAI_API_KEY: z.string().optional(),
   LLM_MODEL: z.string().default("gpt-4o-mini"),
+  LLM_PROVIDER: z.enum(["template", "openai"]).default("template"),
+  LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+  LLM_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+  AGENT_REQUIRE_LLM: z.coerce.boolean().default(false),
+  AGENT_CONFIDENCE_FLOOR: z.coerce.number().min(0).max(1).default(0),
 
   USGS_FEED_URL: z
     .string()

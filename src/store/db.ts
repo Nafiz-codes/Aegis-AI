@@ -10,29 +10,37 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  lat REAL NOT NULL,
-  lon REAL NOT NULL,
+  -- Legacy single-point location; nullable when the explicit
+  -- subscribedLocations JSON list is used instead.
+  lat REAL,
+  lon REAL,
+  subscribed_locations TEXT,
   subscribed_channels TEXT NOT NULL,
   contacts TEXT NOT NULL,
+  preferences TEXT NOT NULL DEFAULT '{}',
   locale TEXT NOT NULL DEFAULT 'en',
-  quiet_hours_start INTEGER,
-  quiet_hours_end INTEGER,
   active INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY,
   source TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  source_name TEXT NOT NULL,
+  source_url TEXT NOT NULL,
   type TEXT NOT NULL,
-  severity TEXT NOT NULL,
+  severity_level TEXT NOT NULL,
+  severity_score REAL NOT NULL,
+  confidence REAL NOT NULL,
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   location_name TEXT,
   lat REAL NOT NULL,
   lon REAL NOT NULL,
-  radius_km REAL,
+  affected_region TEXT,
   magnitude REAL,
   occurred_at TEXT NOT NULL,
+  expected_at TEXT,
   observed_at TEXT NOT NULL,
   raw TEXT
 );
@@ -161,6 +169,11 @@ export class Store {
   /** Persist the in-memory DB to disk. Call periodically or on shutdown. */
   async flush(): Promise<void> {
     if (!this.dirty) return;
+    // In-memory databases (":memory:" or sql.js' transient mode) have no file.
+    if (this.dbPath === ":memory:" || this.dbPath === "") {
+      this.dirty = false;
+      return;
+    }
     const data = this.db.export();
     await mkdir(dirname(this.dbPath), { recursive: true });
     await writeFile(this.dbPath, Buffer.from(data));

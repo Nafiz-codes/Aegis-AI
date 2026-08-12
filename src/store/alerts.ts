@@ -1,7 +1,7 @@
 import type { Store } from "./db.js";
 import type { Alert, AlertStatus, ComposedAlert } from "../types/alerts.js";
+import type { SeverityLevel } from "../types/events.js";
 import type { Channel } from "../types/user.js";
-import type { Severity } from "../types/events.js";
 
 interface AlertRow {
   id: string;
@@ -23,7 +23,7 @@ function toAlert(row: AlertRow): Alert {
     eventId: row.event_id,
     userId: row.user_id,
     channel: row.channel as Channel,
-    severity: row.severity as Severity,
+    severity: row.severity as SeverityLevel,
     composed: JSON.parse(row.composed) as ComposedAlert,
     status: row.status as AlertStatus,
     conversationId: row.conversation_id ?? undefined,

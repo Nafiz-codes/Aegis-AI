@@ -1,6 +1,10 @@
-import type { DisasterSource } from "../services/disasterSource.js";
+import type { DisasterSource, ValidationResult } from "../services/disasterSource.js";
 import type { DiscoveredEvent } from "../services/discoveredEvent.js";
-import { DisasterType, Severity, type NormalizedEvent } from "../types/events.js";
+import {
+  DisasterType,
+  type NormalizedEvent,
+  severityFromScore,
+} from "../types/events.js";
 import { childLogger } from "../logger.js";
 import { loadConfig } from "../config.js";
 import { stableId } from "./usgsSource.js";
@@ -17,6 +21,9 @@ interface NwsAlert {
   certainty?: string;
   effective?: string;
   expires?: string;
+  sender?: string;
+  /** NWS-reported severity. */
+  severity_field?: string;
   geometry?: {
     type: string;
     coordinates: number[][][] | number[][][][];
@@ -24,62 +31,116 @@ interface NwsAlert {
 }
 
 /**
- * US National Weather Service active alerts feed. Free, no key, requires a
- * descriptive User-Agent. Covers extreme weather, floods, wildfires (some).
+ * US National Weather Service active alerts feed. Requires a descriptive
+ * User-Agent. Covers extreme weather, floods, wildfires (some).
  */
 export class NwsSource implements DisasterSource {
   readonly name = "nws";
-  private readonly url: string;
+  readonly sourceName = "US National Weather Service";
+  private readonly baseUrlOverride?: string;
 
-  constructor(baseUrl: string = loadConfig().NWS_API_BASE) {
-    this.url = `${baseUrl.replace(/\/$/, "")}/alerts/active?status=actual&message_type=alert`;
+  constructor(baseUrl?: string) {
+    this.baseUrlOverride = baseUrl;
+  }
+
+  private get url(): string {
+    const base = this.baseUrlOverride ?? loadConfig().NWS_API_BASE;
+    return `${base.replace(/\/$/, "")}/alerts/active?status=actual&message_type=alert`;
   }
 
   async fetch(sinceMs: number): Promise<DiscoveredEvent[]> {
-    const res = await fetch(this.url, {
-      headers: { "User-Agent": "aegis-ai/0.1 (hackathon, contact: ops@aegis.ai)" },
-    });
+    let res: Response;
+    try {
+      res = await fetch(this.url, {
+        headers: { "User-Agent": "aegis-ai/0.1 (hackathon, contact: ops@aegis.ai)" },
+      });
+    } catch (err) {
+      throw new Error(`NWS fetch network error: ${String(err)}`);
+    }
     if (!res.ok) {
       throw new Error(`NWS fetch failed: ${res.status} ${res.statusText}`);
     }
-    const data = (await res.json()) as { features?: Array<{ properties: NwsAlert }> };
+    let data: { features?: Array<{ properties: NwsAlert }> };
+    try {
+      data = (await res.json()) as { features?: Array<{ properties: NwsAlert }> };
+    } catch (err) {
+      throw new Error(`NWS payload was not valid JSON: ${String(err)}`);
+    }
     const features = data.features ?? [];
     const out: DiscoveredEvent[] = [];
+    let dropped = 0;
     for (const f of features) {
-      const p = f.properties;
-      const effective = p.effective ? Date.parse(p.effective) : 0;
-      if (effective < sinceMs) continue;
-      const loc = firstPoint(p);
-      if (!loc) continue;
-      out.push({
-        externalId: p.id,
-        source: this.name,
-        type: classifyNwsEvent(p.event),
-        title: p.headline ?? p.event,
-        description: p.description ?? "",
-        locationName: p.areaDesc,
-        location: loc,
-        occurredAt: p.effective ?? new Date(effective).toISOString(),
-      });
+      const d = this.featureToDiscovered(f, sinceMs);
+      if (d) out.push(d);
+      else dropped += 1;
     }
-    log.debug({ count: out.length }, "nws fetch done");
+    log.debug({ kept: out.length, dropped }, "nws fetch done");
     return out;
   }
 
   normalize(d: DiscoveredEvent): NormalizedEvent {
-    const severity = nwsSeverity(d.title);
+    const score = d.severityScore ?? 0.4;
+    const severity = severityFromScore(score);
     return {
-      id: stableId(d.source, d.externalId),
-      source: d.source,
+      id: stableId(this.name, d.externalId),
+      source: this.name,
+      externalId: d.externalId,
+      sourceName: this.sourceName,
+      sourceUrl: d.sourceUrl,
       type: DisasterType.parse(d.type),
       severity,
+      confidence: d.confidence ?? 0.7,
       title: d.title,
       description: d.description ?? "",
       locationName: d.locationName,
       location: d.location,
-      radiusKm: 100,
+      affectedRegion: d.bbox ? { kind: "bbox", bbox: d.bbox } : undefined,
+      magnitude: d.magnitude,
       occurredAt: d.occurredAt,
+      expectedAt: d.expectedAt,
       observedAt: new Date().toISOString(),
+      raw: undefined,
+    };
+  }
+
+  validate(ev: NormalizedEvent): ValidationResult {
+    if (ev.source !== this.name) {
+      return { ok: false, reason: "wrong-source", detail: `expected ${this.name}, got ${ev.source}` };
+    }
+    return { ok: true };
+  }
+
+  private featureToDiscovered(
+    f: { properties: NwsAlert },
+    sinceMs: number,
+  ): DiscoveredEvent | null {
+    const p = f.properties;
+    if (!p || typeof p.id !== "string") return null;
+    const effective = p.effective ? Date.parse(p.effective) : 0;
+    if (!isFinite(effective)) return null;
+    if (effective < sinceMs) return null;
+    const loc = firstPoint(p);
+    if (!loc) return null;
+    const sev = nwsSeverity(p);
+    const score = sev === "CRITICAL" ? 0.9 : sev === "HIGH" ? 0.65 : sev === "MODERATE" ? 0.4 : 0.15;
+    const bbox = firstBbox(p);
+    return {
+      externalId: p.id,
+      source: this.name,
+      sourceName: this.sourceName,
+      sourceUrl: `https://api.weather.gov/alerts/${encodeURIComponent(p.id)}`,
+      type: classifyNwsEvent(p.event),
+      severity: sev,
+      severityScore: score,
+      confidence: 0.7,
+      title: p.headline ?? p.event,
+      description: p.description ?? "",
+      locationName: p.areaDesc,
+      location: loc,
+      bbox: bbox ?? undefined,
+      radiusKm: bbox ? undefined : 100,
+      occurredAt: p.effective ?? new Date(effective).toISOString(),
+      expectedAt: isFinite(Date.parse(p.expires ?? "")) ? p.expires : undefined,
     };
   }
 }
@@ -101,12 +162,12 @@ function classifyNwsEvent(event: string): NormalizedEvent["type"] {
   return "other";
 }
 
-function nwsSeverity(title: string): Severity {
-  const t = title.toLowerCase();
-  if (t.includes("extreme")) return "sev1";
-  if (t.includes("severe")) return "sev2";
-  if (t.includes("moderate")) return "sev3";
-  return "sev4";
+function nwsSeverity(p: NwsAlert): NormalizedEvent["severity"]["level"] {
+  const s = (p.severity ?? "").toLowerCase();
+  if (s.includes("extreme")) return "CRITICAL";
+  if (s.includes("severe")) return "HIGH";
+  if (s.includes("moderate")) return "MODERATE";
+  return "LOW";
 }
 
 function firstPoint(alert: NwsAlert): NormalizedEvent["location"] | null {
@@ -128,6 +189,45 @@ function firstPoint(alert: NwsAlert): NormalizedEvent["location"] | null {
     const [lon, lat] = pt;
     if (typeof lat !== "number" || typeof lon !== "number") return null;
     return { lat, lon };
+  } catch {
+    return null;
+  }
+}
+
+function firstBbox(
+  alert: NwsAlert,
+): { minLon: number; minLat: number; maxLon: number; maxLat: number } | null {
+  const g = alert.geometry;
+  if (!g) return null;
+  try {
+    let lons: number[] = [];
+    let lats: number[] = [];
+    if (g.type === "Polygon") {
+      const ring = (g.coordinates as number[][][])[0];
+      if (!Array.isArray(ring)) return null;
+      for (const pt of ring) {
+        if (typeof pt[0] !== "number" || typeof pt[1] !== "number") continue;
+        lons.push(pt[0]);
+        lats.push(pt[1]);
+      }
+    } else if (g.type === "MultiPolygon") {
+      const ring = (g.coordinates as number[][][][])[0]?.[0];
+      if (!Array.isArray(ring)) return null;
+      for (const pt of ring) {
+        if (typeof pt[0] !== "number" || typeof pt[1] !== "number") continue;
+        lons.push(pt[0]);
+        lats.push(pt[1]);
+      }
+    } else {
+      return null;
+    }
+    if (lons.length === 0) return null;
+    return {
+      minLon: Math.min(...lons),
+      minLat: Math.min(...lats),
+      maxLon: Math.max(...lons),
+      maxLat: Math.max(...lats),
+    };
   } catch {
     return null;
   }

@@ -7,8 +7,12 @@ describe("NormalizedEvent schema", () => {
   const valid = {
     id: "evt_abc123",
     source: "usgs",
+    externalId: "usgs:abc123",
+    sourceName: "USGS Earthquake Hazards Program",
+    sourceUrl: "https://earthquake.usgs.gov/earthquakes/eventpage/abc123",
     type: "earthquake",
-    severity: "sev3",
+    severity: { level: "HIGH", score: 0.65 },
+    confidence: 0.8,
     title: "M5.4 - 10km S of Anywhere",
     description: "Minor shaking expected.",
     location: { lat: 35.0, lon: -118.0 },
@@ -26,14 +30,58 @@ describe("NormalizedEvent schema", () => {
     expect(r.success).toBe(false);
   });
 
-  it("rejects unknown severity", () => {
-    const r = NormalizedEvent.safeParse({ ...valid, severity: "sev9" });
+  it("rejects unknown severity level", () => {
+    const r = NormalizedEvent.safeParse({
+      ...valid,
+      severity: { level: "DEFCON-2", score: 0.5 },
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects out-of-range severity score", () => {
+    const r = NormalizedEvent.safeParse({
+      ...valid,
+      severity: { level: "HIGH", score: 2.5 },
+    });
     expect(r.success).toBe(false);
   });
 
   it("rejects out-of-range latitude", () => {
-    const r = NormalizedEvent.safeParse({ ...valid, location: { lat: 95, lon: 0 } });
+    const r = NormalizedEvent.safeParse({
+      ...valid,
+      location: { lat: 95, lon: 0 },
+    });
     expect(r.success).toBe(false);
+  });
+
+  it("rejects out-of-range confidence", () => {
+    const r = NormalizedEvent.safeParse({ ...valid, confidence: 1.5 });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects missing required externalId", () => {
+    const { externalId: _drop, ...without } = valid;
+    const r = NormalizedEvent.safeParse(without);
+    expect(r.success).toBe(false);
+  });
+
+  it("accepts an event with an affected region (radius)", () => {
+    const r = NormalizedEvent.safeParse({
+      ...valid,
+      affectedRegion: { kind: "radius", center: { lat: 35, lon: -118 }, radiusKm: 100 },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("accepts an event with an affected region (bbox)", () => {
+    const r = NormalizedEvent.safeParse({
+      ...valid,
+      affectedRegion: {
+        kind: "bbox",
+        bbox: { minLon: -119, minLat: 34, maxLon: -117, maxLat: 36 },
+      },
+    });
+    expect(r.success).toBe(true);
   });
 });
 
@@ -53,16 +101,11 @@ describe("User schema", () => {
   });
 
   it("rejects unknown channel", () => {
-    const r = User.safeParse({ ...valid, subscribedChannels: ["smoke-signal"] });
-    expect(r.success).toBe(false);
-  });
-
-  it("requires contacts to match subscribedChannels", () => {
     const r = User.safeParse({
       ...valid,
-      contacts: [{ channel: "telegram", address: "no-id" }],
+      subscribedChannels: ["smoke-signal"],
     });
-    expect(r.success).toBe(true); // schema does not enforce cross-field; validate in business logic
+    expect(r.success).toBe(false);
   });
 });
 
@@ -72,7 +115,7 @@ describe("Alert schema", () => {
     eventId: "evt_abc123",
     userId: "usr_1",
     channel: "email",
-    severity: "sev2",
+    severity: "HIGH",
     composed: {
       subject: "Alert",
       text: "Body",
@@ -89,6 +132,11 @@ describe("Alert schema", () => {
 
   it("rejects unknown status", () => {
     const r = Alert.safeParse({ ...valid, status: "flying" });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects unknown severity tier", () => {
+    const r = Alert.safeParse({ ...valid, severity: "URGENT" });
     expect(r.success).toBe(false);
   });
 });

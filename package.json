@@ -11,7 +11,9 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "demo": "tsx src/simulate.ts",
+    "demo:all": "tsx src/simulate.ts all"
   },
   "engines": {
     "node": ">=18"
