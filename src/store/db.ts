@@ -142,6 +142,7 @@ export class Store {
   all<T>(sql: string, params: SqlParam[] = [], map: (row: Record<string, unknown>) => T): T[] {
     const stmt = this.db.prepare(sql);
     try {
+      if (params.length > 0) stmt.bind(params);
       const out: T[] = [];
       while (stmt.step()) {
         const row = stmt.getAsObject() as Record<string, unknown>;
@@ -157,6 +158,7 @@ export class Store {
   first<T>(sql: string, params: SqlParam[] = [], map: (row: Record<string, unknown>) => T): T | null {
     const stmt = this.db.prepare(sql);
     try {
+      if (params.length > 0) stmt.bind(params);
       if (stmt.step()) {
         return map(stmt.getAsObject() as Record<string, unknown>);
       }

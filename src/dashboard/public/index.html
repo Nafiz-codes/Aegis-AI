@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aegis-AI · Emergency Operations Centre</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <div>
+          <h1>AEGIS<span class="brand-sub">-AI</span></h1>
+          <p>Emergency Operations Centre · Caspian Buildathon</p>
+        </div>
+      </div>
+      <div class="meta">
+        <div class="threat" id="threat">
+          <span class="dot"></span><span class="threat-label">SYSTEM NORMAL</span>
+        </div>
+        <div class="clock">
+          <span class="clock-label">OPS CLOCK</span>
+          <span class="clock-value" id="clock">--:--:--</span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="kpis" aria-label="System KPIs">
+        <div class="kpi">
+          <span class="kpi-label">ACTIVE EVENTS</span>
+          <span class="kpi-value" id="kpi-events">0</span>
+          <span class="kpi-sub">verified in last 24h</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">DELIVERED</span>
+          <span class="kpi-value" id="kpi-delivered">0</span>
+          <span class="kpi-sub">alerts dispatched</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">FAILED</span>
+          <span class="kpi-value" id="kpi-failed">0</span>
+          <span class="kpi-sub">delivery errors</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">SUBSCRIBERS</span>
+          <span class="kpi-value" id="kpi-users">0</span>
+          <span class="kpi-sub">monitored</span>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="card events">
+          <header><h2>ACTIVE DISASTERS</h2><span class="badge" id="events-count">0</span></header>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Severity</th>
+                  <th>Event</th>
+                  <th>Source</th>
+                  <th>Region</th>
+                  <th>Time (UTC)</th>
+                  <th>Subscribers</th>
+                  <th>Delivery</th>
+                </tr>
+              </thead>
+              <tbody id="events-body"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="card pipeline">
+          <header><h2>AGENT PIPELINE</h2><span class="badge live">LIVE</span></header>
+          <ol class="pipeline-steps">
+            <li><span class="step-key">INGEST</span><span class="step-name">Source Polling</span></li>
+            <li><span class="step-key">NORMALIZE</span><span class="step-name">Verify &amp; Dedupe</span></li>
+            <li><span class="step-key">MATCH</span><span class="step-name">Geo-fence Audience</span></li>
+            <li><span class="step-key">DECIDE</span><span class="step-name">Agent Decision</span></li>
+            <li><span class="step-key">COMPOSE</span><span class="step-name">Channel Payload</span></li>
+            <li><span class="step-key">DELIVER</span><span class="step-name">Caspian Dispatch</span></li>
+          </ol>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="card timeline">
+          <header>
+            <h2>LIVE TIMELINE</h2>
+            <span class="badge" id="timeline-count">0</span>
+          </header>
+          <div class="timeline-stream" id="timeline"></div>
+        </article>
+
+        <article class="card decisions">
+          <header>
+            <h2>AGENT DECISIONS</h2>
+            <span class="badge" id="decisions-count">0</span>
+          </header>
+          <ul class="decision-list" id="decisions"></ul>
+        </article>
+      </section>
+
+      <section class="card deliveries">
+        <header>
+          <h2>RECENT DISPATCHES</h2>
+          <span class="badge" id="dispatch-count">0</span>
+        </header>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time (UTC)</th>
+                <th>Recipient</th>
+                <th>Channel</th>
+                <th>Severity</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="dispatch-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>AEGIS-AI · Caspian Buildathon demo</span>
+      <span class="footer-meta">backend &rarr; <code>sql.js</code> + Caspian SDK · UI &rarr; SSE stream</span>
+    </footer>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>
